@@ -5,9 +5,11 @@ Consists of five key directories:
 
 **I.      Projects: Collection of projects and deliverables related to Meridian Collective Projects.**
 
-  *Each project folder consists of an input, temporary, output, and code folder for reproducibility.*
+  *Note: Each project folder consists of an input, temporary, output, and code folder for reproducibility.*
   
-**II.     Resources: Collection of web pages, online textbooks, Twitter links, YouTube videos, etc., which are specifically related to tips on how to program effectively in different programming languages (primarily: R, Python, STATA, Tableau, and ArcGIS). This could include PDF overviews of useful packages (in R or Python) or helpful Stack Exchange/STATA Forum posts (i.e. how to run a for loop, how to manipulate string variables, how to work with dates).**
+**II.     Resources: Collection of web pages, online textbooks, Twitter links, YouTube videos, etc., which are specifically related to tips on how to program effectively in different programming languages (primarily: R, Python, STATA, Tableau, and ArcGIS).**
+
+*Note: This could include PDF overviews of useful packages (in R or Python) or helpful Stack Exchange/STATA Forum posts (i.e. how to run a for loop, how to manipulate string variables, how to work with dates).*
 
 **III.    Code Samples: Collection of scripts across programming languages**
 
