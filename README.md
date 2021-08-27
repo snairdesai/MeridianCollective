@@ -15,7 +15,9 @@
 
 *Contact:* [Sameer Nair-Desai](mailto:sameer_nair-desai@brown.edu?subject=[GitHub]%20Source%20Han%20Sans) (Brown University)
 
-Consists of five key directories:
+**--------------------------------------------------------------------------------------------------------------------------------------------------------**
+
+This repository consists of five key directories:
 
 **I.      Projects: Collection of projects and deliverables related to Meridian Collective Projects.**
 
@@ -31,6 +33,6 @@ Consists of five key directories:
    
    *B. Sourced - Any scripts we have found online (often available for reproducibility of journal publications) which serve as good examples for our efforts.*
     
-**IV.     Output Samples: Collection of links to data platforms, PDFs of visuals, etc., which we find particuarly aesthetic or otherwise relevant.
+**IV.     Output Samples: Collection of links to data platforms, PDFs of visuals, etc., which we find particuarly aesthetic or otherwise relevant.**
 
 **V.      Any miscellanous inputs relevant for our knowledge/understanding of quantitative data analysis.**
