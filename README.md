@@ -13,7 +13,7 @@
 
 - [Kavya Nambiar](https://www.linkedin.com/in/kavya-nambiar-188591121/)
 
-*Contact:* [Sameer Nair-Desai](mailto:sameer_nair-desai@brown.edu?subject=[GitHub]%20Source%20Han%20Sans) (Brown University)
+*Contact:* [Sameer Nair-Desai](mailto:sameer_nair-desai@brown.edu?subject=[Meridian Collective GitHub]%20Source%20Han%20Sans) (Brown University)
 
 **-----------------------------------------------------------------------------------------------------------------------------------------**
 
