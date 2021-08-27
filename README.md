@@ -3,13 +3,17 @@
 
 **Members**
 
-[Sameer Nair-Desai](https://sameernairdesai.wordpress.com/)
-[Hailey Robertson](https://www.linkedin.com/in/hailey-robertson/)
-[Neil Chin](https://www.linkedin.com/in/neil-chin-3b8822126/)
-[Srividya Dasaraju](https://www.linkedin.com/in/srividya-dasaraju-580a05133/)
-[Kavya Nambiar](https://www.linkedin.com/in/kavya-nambiar-188591121/)
+- [Sameer Nair-Desai](https://sameernairdesai.wordpress.com/)
 
-Contact: [Sameer Nair-Desai](mailto:sameer_nair-desai@brown.edu?subject=[GitHub]%20Source%20Han%20Sans) (Brown University)
+- [Hailey Robertson](https://www.linkedin.com/in/hailey-robertson/)
+
+- [Neil Chin](https://www.linkedin.com/in/neil-chin-3b8822126/)
+
+- [Srividya Dasaraju](https://www.linkedin.com/in/srividya-dasaraju-580a05133/)
+
+- [Kavya Nambiar](https://www.linkedin.com/in/kavya-nambiar-188591121/)
+
+*Contact:* [Sameer Nair-Desai](mailto:sameer_nair-desai@brown.edu?subject=[GitHub]%20Source%20Han%20Sans) (Brown University)
 
 Consists of five key directories:
 
