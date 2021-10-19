@@ -1,0 +1,110 @@
+---
+title: "COVIDfundingdata"
+author: "Neil Chin"
+date: "10/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# INSTALL AND LIBRARY NECESSARY PACKAGES
+```{r, echo = FALSE}
+library(dplyr, lib.loc = "/Library/Frameworks/R.framework/Versions/4.0/Resources/library")
+library("tidyr")
+library("jsonlite")
+library("stringr")
+```
+
+# Funding data was sourced from https://tracking.ghscosting.org/data on 10/4/21
+```{r, echo = FALSE}
+fundingdata <- read.csv("~/Desktop/Meridian/COVIDfundingdata/fundingdata.csv")
+```
+
+# CLEAN FUNDING AMOUNTS AND RECIPIENT TYPE, UNBUNDLE RECIPIENTS
+```{r, echo = FALSE}
+# Remove commas from funding amount variables
+fundingdata$Response.specific.amount.committed <- str_replace_all(fundingdata$Response.specific.amount.committed, ",", "")
+fundingdata$Response.specific.amount.disbursed <- str_replace_all(fundingdata$Response.specific.amount.disbursed, ",", "")
+
+# Destring funding amount variables
+fundingdata$Response.specific.amount.committed <- as.numeric(fundingdata$Response.specific.amount.committed)
+fundingdata$Response.specific.amount.disbursed <- as.numeric(fundingdata$Response.specific.amount.disbursed)
+
+# Count missings (lots of committed amounts missing)
+sum(is.na(fundingdata$Response.specific.amount.committed))
+sum(is.na(fundingdata$Response.specific.amount.disbursed))
+
+# Split recipient types, keep only government recipients
+countries <- separate_rows(fundingdata, 9, sep = "; ")
+countries <- countries[countries$Recipient.type == 'Government', ]
+
+# Unbundle funding for multiple recipients
+
+## Find the number of recipient countries in each entry and create an indicator for countries with multiple recipents
+countries$Number.of.recipients <- str_count(countries$Recipient, ";") + 1
+for (i in 1:length(countries$Recipient)) {
+  if (countries$Number.of.recipients[i] > 1) {
+    countries$Multiple.recipients[i] <- 1
+  } else{
+    countries$Multiple.recipients[i] <- 0
+  }
+}
+
+## Maximum number of recipient countries is 17; 128 out of 5969 (~2%) observations have multiple recipient countries
+print(max(countries$Number.of.recipients))
+sum(countries$Multiple.recipients)
+
+## Create an id variable for each project
+countries$Project.id <- 1:nrow(countries)
+
+## Split the rows with multiple observations
+countries <- separate_rows(countries, 8, sep = "; ")
+
+## Divide amounts committed and disbursed equally among recipients
+countries$Amount.committed.individual <- countries$Response.specific.amount.committed / countries$Number.of.recipients
+countries$Amount.disbursed.individual <- countries$Response.specific.amount.disbursed / countries$Number.of.recipients
+```
+
+# KEEP ONLY NECESSARY COLUMNS
+```{r, echo = FALSE}
+# Keep necessary columns
+countries <- countries[c(1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 17, 19, 20, 21, 22, 23)]
+```
+
+# MERGE WITH WHO COUNTRY CODES
+```{r, echo = FALSE}
+# WHO Country Code Merger
+json_file <- 'https://datahub.io/core/country-codes/datapackage.json'
+json_data <- fromJSON(paste(readLines(json_file), collapse=""))
+
+# Get list of all resources:
+print(json_data$resources$name)
+
+# Print all tabular data(if exists any)
+for(i in 1:length(json_data$resources$datahub$type)){
+  if(json_data$resources$datahub$type[i]=='derived/csv'){
+    path_to_file = json_data$resources$path[i]
+    data <- read.csv(url(path_to_file))
+    print(data)
+  }
+}
+
+# Merge FIPS country codes into funding data by official name
+fips <- data.frame(data$FIPS, data$official_name_en)
+fips <- fips %>%
+  rename(Recipient = data.official_name_en)
+countries_fips_merged <- merge(countries, fips, all = TRUE)
+
+# All unmerged observations come from the WHO Country Code data (87 countries)
+sum(is.na(countries_fips_merged$Project.name))
+
+# Keep only merged observations
+countries_fips_merged <- subset(countries_fips_merged, !is.na(countries_fips_merged$Project.name))
+```
+
+```{r, echo = FALSE}
+write.csv(countries_fips_merged, "~/Desktop/Meridian/COVIDfundingdata/countriesfundingdata.csv", row.names = FALSE)
+```
+
