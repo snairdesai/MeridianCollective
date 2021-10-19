@@ -103,7 +103,7 @@ sum(is.na(countries_fips_merged$Project.name))
 # Keep only merged observations
 countries_fips_merged <- subset(countries_fips_merged, !is.na(countries_fips_merged$Project.name))
 ```
-
+# EXPORT DATA AS .CSV FILE
 ```{r, echo = FALSE}
 write.csv(countries_fips_merged, "~/Desktop/Meridian/COVIDfundingdata/countriesfundingdata.csv", row.names = FALSE)
 ```
