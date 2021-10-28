@@ -7,7 +7,7 @@
 
 - [Hailey Robertson](https://www.linkedin.com/in/hailey-robertson/)
 
-- [Neil Chin](https://www.linkedin.com/in/neil-chin-3b8822126/)
+- [Neil Chin](https://neilkchin.com/)
 
 - [Srividya Dasaraju](https://www.linkedin.com/in/srividya-dasaraju-580a05133/)
 
