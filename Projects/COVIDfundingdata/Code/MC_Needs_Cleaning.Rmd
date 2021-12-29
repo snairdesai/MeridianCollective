@@ -1,0 +1,892 @@
+---
+title: "Need Indices Cleaning"
+author: "Sameer Nair-Desai"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+
+# Setting the working directory and settings. Please change directories as needed.
+knitr::opts_chunk$set(echo = F, warning = F, message = F, dpi = 300)
+knitr::opts_knit$set(root.dir = "/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/")
+```
+
+```{r libraries, include = FALSE}
+
+# TODO: Split out-of-sample subset by:
+# 1. No JEE
+# 2. No Funding
+# 3. Neither Funding Nor JEE
+
+# Loading packages. Please install these packages if they have not been.
+# You can use install.packages("package name") to do this.
+cat("Loading packages ... ")
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(webshot))
+suppressPackageStartupMessages(library(plotly))
+suppressPackageStartupMessages(library(scales))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(flextable))
+suppressPackageStartupMessages(library(officer))
+suppressPackageStartupMessages(library(openxlsx))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(coronavirus))
+suppressPackageStartupMessages(library(jsonlite))
+suppressPackageStartupMessages(library(forecast))
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(directlabels))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(arsenal))
+suppressPackageStartupMessages(library(collapse))
+suppressPackageStartupMessages(library(Rcpp))
+
+# Removing scientific notation.
+options(scipen = 999)
+
+
+```
+
+```{r imports, include = FALSE}
+
+# Country Codes
+json_file <- 'https://datahub.io/core/country-codes/datapackage.json'
+json_data <- fromJSON(paste(readLines(json_file), collapse=""))
+
+# get list of all resources:
+print(json_data$resources$name)
+
+# print all tabular data(if exists any)
+for(i in 1:length(json_data$resources$datahub$type)){
+  if(json_data$resources$datahub$type[i] == 'derived/csv'){
+    path_to_file = json_data$resources$path[i]
+    data <- read.csv(url(path_to_file))
+    print(data)
+  }
+}
+
+country_codes <- select(data, FIPS, official_name_en)
+
+print(paste0("The total number of raw countries is: ", nrow(country_codes)))
+
+country_codes <- country_codes %>%
+  dplyr::filter(official_name_en != "") %>%
+  dplyr::filter(FIPS != "") %>%
+  dplyr::rename(country = official_name_en)
+
+country_codes$data_ID = "Country Code File"
+
+# Renaming problematic countries.
+
+country_codes$country <- ifelse(country_codes$FIPS == "MK", "North Macedonia", country_codes$country)
+
+print(paste0("After cleaning, the total number of countries is: ", nrow(country_codes)))
+
+country_codes$data_ID = "Country File Data ID"
+
+# Now, we merge in key demographics to our country code file.
+
+# Democracy Scores
+
+democracy <- read.csv("Input/freedom_house.csv")
+
+democracy$data_ID = "Democracy File Data ID"
+
+democracy <- democracy %>%
+  dplyr::rename(country = Country, democracy_score = Democracy.Score, democracy_category = Democracy.Category,
+                political_rights = Political.Rights, civil_liberties = Civil.Liberties)
+
+# Renaming problematic countries.
+democracy$country[democracy$country == "The Bahamas"] <- "Bahamas"
+democracy$country[democracy$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+democracy$country[democracy$country == "Brunei"] <- "Brunei Darussalam"
+democracy$country[democracy$country == "Hong Kong"] <- "China, Hong Kong Special Administrative Region"
+democracy$country[democracy$country == "Republic of the Congo"] <- "Congo"
+democracy$country[democracy$country == "Czech Republic"] <- "Czechia"
+democracy$country[democracy$country == "North Korea"] <- "Democratic People's Republic of Korea"
+democracy$country[democracy$country == "North Korea"] <- "Democratic People's Republic of Korea"
+democracy$country[democracy$country == "The Gambia"] <- "Gambia"
+democracy$country[democracy$country == "Iran"] <- "Iran (Islamic Republic of)"
+democracy$country[democracy$country == "Laos"] <- "Lao People's Democratic Republic"
+democracy$country[democracy$country == "Micronesia"] <- "Micronesia (Federated States of)"
+democracy$country[democracy$country == "South Korea"] <- "Republic of Korea"
+democracy$country[democracy$country == "Moldova"] <- "Republic of Moldova"
+democracy$country[democracy$country == "Russia"] <- "Russian Federation"
+democracy$country[democracy$country == "St. Lucia"] <- "Saint Lucia"
+democracy$country[democracy$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+democracy$country[democracy$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+democracy$country[democracy$country == "São Tomé and Príncipe"] <- "Sao Tome and Principe"
+democracy$country[democracy$country == "Syria"] <- "Syrian Arab Republic"
+democracy$country[democracy$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+democracy$country[democracy$country == "Tanzania"] <- "United Republic of Tanzania"
+democracy$country[democracy$country == "United States"] <- "United States of America"
+democracy$country[democracy$country == "Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+democracy$country[democracy$country == "Vietnam"] <- "Viet Nam"
+
+country_codes <- merge(country_codes, democracy, by = "country", all = TRUE)
+
+country_codes <- country_codes %>%
+  dplyr::filter(!is.na(data_ID.x))
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("data_ID.y"))]
+
+fdi <- read.csv("Input/wb_fdi.csv")
+
+fdi$data_ID = "FDI File Data ID"
+
+fdi <- fdi %>%
+  dplyr::rename(country = Country.Name, country_code = Country.Code, 
+                `2015 FDI Inflows` = X2015.FDI.Inflows,
+                `2016 FDI Inflows` = X2016.FDI.Inflows, 
+                `2017 FDI Inflows` = X2017.FDI.Inflows,
+                `2018 FDI Inflows` = X2018.FDI.Inflows,
+                `2019 FDI Inflows` = X2019.FDI.Inflows)
+
+fdi$country[fdi$country == "Bahamas, The"] <- "Bahamas"
+fdi$country[fdi$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+fdi$country[fdi$country == "Hong Kong SAR, China"] <- "China, Hong Kong Special Administrative Region"
+fdi$country[fdi$country == "Macao SAR, China"] <- "China, Macao Special Administrative Region"
+fdi$country[fdi$country == "Congo, Rep."] <- "Congo"
+fdi$country[fdi$country == "Congo, Dem. Rep."] <- "Democratic Republic of the Congo"
+fdi$country[fdi$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+fdi$country[fdi$country == "Curacao"] <- "Curaçao"
+fdi$country[fdi$country == "Czech Republic"] <- "Czechia"
+fdi$country[fdi$country == "Korea, Dem. People's Rep."] <- "Democratic People's Republic of Korea"
+fdi$country[fdi$country == "Gambia, The"] <- "Gambia"
+fdi$country[fdi$country == "Iran, Islamic Rep."] <- "Iran (Islamic Republic of)"
+fdi$country[fdi$country == "Kyrgyz Republic"] <- "Kyrgyzstan"
+fdi$country[fdi$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+fdi$country[fdi$country == "Micronesia, Fed. Sts."] <- "Micronesia (Federated States of)"
+fdi$country[fdi$country == "Korea, Rep."] <- "Republic of Korea"
+fdi$country[fdi$country == "Moldova"] <- "Republic of Moldova"
+fdi$country[fdi$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+fdi$country[fdi$country == "St. Lucia"] <- "Saint Lucia"
+fdi$country[fdi$country == "St. Martin (French part)"] <- "Saint Martin (French Part)"
+fdi$country[fdi$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+fdi$country[fdi$country == "Slovak Republic"] <- "Slovakia"
+fdi$country[fdi$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+fdi$country[fdi$country == "Tanzania"] <- "United Republic of Tanzania"
+fdi$country[fdi$country == "United States"] <- "United States of America"
+fdi$country[fdi$country == "Venezuela, RB"] <- "Venezuela (Bolivarian Republic of)"
+fdi$country[fdi$country == "Vietnam"] <- "Viet Nam"
+fdi$country[fdi$country == "Yemen, Rep."] <- "Yemen"
+fdi$country[fdi$country == "Egypt, Arab Rep."] <- "Egypt"
+fdi$country[fdi$country == "Virgin Islands (U.S.)"] <- "United States Virgin Islands"
+
+country_codes <- merge(country_codes, fdi, by = "country", all = TRUE)
+
+country_codes <- country_codes %>%
+  dplyr::filter(!is.na(data_ID.x))
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("data_ID"))]
+
+gni <- read.csv("Input/wb_gni_pc.csv")
+
+gni$data_ID = "GNI File Data ID"
+
+gni <- gni %>%
+  dplyr::rename(country = Country.Name, country_code = Country.Code, 
+                `2015 GNI Per Capita` = GNI.Per.Capita.2015,
+                `2016 GNI Per Capita` = GNI.Per.Capita.2016, 
+                `2017 GNI Per Capita` = GNI.Per.Capita.2017,
+                `2018 GNI Per Capita` = GNI.Per.Capita.2018,
+                `2019 GNI Per Capita` = GNI.Per.Capita.2019,
+                `2020 GNI Per Capita` = GNI.Per.Capita.2020)
+
+gni$country[gni$country == "Bahamas, The"] <- "Bahamas"
+gni$country[gni$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+gni$country[gni$country == "Hong Kong SAR, China"] <- "China, Hong Kong Special Administrative Region"
+gni$country[gni$country == "Macao SAR, China"] <- "China, Macao Special Administrative Region"
+gni$country[gni$country == "Congo, Rep."] <- "Congo"
+gni$country[gni$country == "Congo, Dem. Rep."] <- "Democratic Republic of the Congo"
+gni$country[gni$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+gni$country[gni$country == "Curacao"] <- "Curaçao"
+gni$country[gni$country == "Czech Republic"] <- "Czechia"
+gni$country[gni$country == "Korea, Dem. People's Rep."] <- "Democratic People's Republic of Korea"
+gni$country[gni$country == "Gambia, The"] <- "Gambia"
+gni$country[gni$country == "Iran, Islamic Rep."] <- "Iran (Islamic Republic of)"
+gni$country[gni$country == "Kyrgyz Republic"] <- "Kyrgyzstan"
+gni$country[gni$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+gni$country[gni$country == "Micronesia, Fed. Sts."] <- "Micronesia (Federated States of)"
+gni$country[gni$country == "Korea, Rep."] <- "Republic of Korea"
+gni$country[gni$country == "Moldova"] <- "Republic of Moldova"
+gni$country[gni$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+gni$country[gni$country == "St. Lucia"] <- "Saint Lucia"
+gni$country[gni$country == "St. Martin (French part)"] <- "Saint Martin (French Part)"
+gni$country[gni$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+gni$country[gni$country == "Slovak Republic"] <- "Slovakia"
+gni$country[gni$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+gni$country[gni$country == "Tanzania"] <- "United Republic of Tanzania"
+gni$country[gni$country == "United States"] <- "United States of America"
+gni$country[gni$country == "Venezuela, RB"] <- "Venezuela (Bolivarian Republic of)"
+gni$country[gni$country == "Vietnam"] <- "Viet Nam"
+gni$country[gni$country == "Yemen, Rep."] <- "Yemen"
+gni$country[gni$country == "Egypt, Arab Rep."] <- "Egypt"
+gni$country[gni$country == "Virgin Islands (U.S.)"] <- "United States Virgin Islands"
+
+country_codes <- merge(country_codes, gni, by = "country_code", all = TRUE)
+
+country_codes <- country_codes %>%
+  dplyr::filter(!is.na(country.x))
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("data_ID"))]
+
+health <- read.csv("Input/wb_health_expenditures.csv")
+
+health <- health %>%
+  dplyr::rename(country = Country.Name, country_code = Country.Code, 
+                `2015 Health Expenditures` = X2015.Health.Expenditures,
+                `2016 Health Expenditures` = X2016.Health.Expenditures, 
+                `2017 Health Expenditures` = X2017.Health.Expenditures,
+                `2018 Health Expenditures` = X2018.Health.Expenditures)
+
+health$country[health$country == "Bahamas, The"] <- "Bahamas"
+health$country[health$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+health$country[health$country == "Hong Kong SAR, China"] <- "China, Hong Kong Special Administrative Region"
+health$country[health$country == "Macao SAR, China"] <- "China, Macao Special Administrative Region"
+health$country[health$country == "Congo, Rep."] <- "Congo"
+health$country[health$country == "Congo, Dem. Rep."] <- "Democratic Republic of the Congo"
+health$country[health$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+health$country[health$country == "Curacao"] <- "Curaçao"
+health$country[health$country == "Czech Republic"] <- "Czechia"
+health$country[health$country == "Korea, Dem. People's Rep."] <- "Democratic People's Republic of Korea"
+health$country[health$country == "Gambia, The"] <- "Gambia"
+health$country[health$country == "Iran, Islamic Rep."] <- "Iran (Islamic Republic of)"
+health$country[health$country == "Kyrgyz Republic"] <- "Kyrgyzstan"
+health$country[health$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+health$country[health$country == "Micronesia, Fed. Sts."] <- "Micronesia (Federated States of)"
+health$country[health$country == "Korea, Rep."] <- "Republic of Korea"
+health$country[health$country == "Moldova"] <- "Republic of Moldova"
+health$country[health$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+health$country[health$country == "St. Lucia"] <- "Saint Lucia"
+health$country[health$country == "St. Martin (French part)"] <- "Saint Martin (French Part)"
+health$country[health$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+health$country[health$country == "Slovak Republic"] <- "Slovakia"
+health$country[health$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+health$country[health$country == "Tanzania"] <- "United Republic of Tanzania"
+health$country[health$country == "United States"] <- "United States of America"
+health$country[health$country == "Venezuela, RB"] <- "Venezuela (Bolivarian Republic of)"
+health$country[health$country == "Vietnam"] <- "Viet Nam"
+health$country[health$country == "Yemen, Rep."] <- "Yemen"
+health$country[health$country == "Egypt, Arab Rep."] <- "Egypt"
+health$country[health$country == "Virgin Islands (U.S.)"] <- "United States Virgin Islands"
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("country.y", "data_ID.x"))]
+
+country_codes <- merge(country_codes, health, by = "country_code", all.x = TRUE)
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("country"))]
+
+population <- read.csv("Input/wb_population.csv")
+
+population <- population %>%
+  dplyr::rename(country = Country.Name, country_code = Country.Code, 
+                `2015 Population` = X2015.Population,
+                `2016 Population` = X2016.Population, 
+                `2017 Population` = X2017.Population,
+                `2018 Population` = X2018.Population,
+                `2019 Population` = X2019.Population,
+                `2020 Population` = X2020.Population)
+
+population$country[population$country == "Bahamas, The"] <- "Bahamas"
+population$country[population$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+population$country[population$country == "Hong Kong SAR, China"] <- "China, Hong Kong Special Administrative Region"
+population$country[population$country == "Macao SAR, China"] <- "China, Macao Special Administrative Region"
+population$country[population$country == "Congo, Rep."] <- "Congo"
+population$country[population$country == "Congo, Dem. Rep."] <- "Democratic Republic of the Congo"
+population$country[population$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+population$country[population$country == "Curacao"] <- "Curaçao"
+population$country[population$country == "Czech Republic"] <- "Czechia"
+population$country[population$country == "Korea, Dem. People's Rep."] <- "Democratic People's Republic of Korea"
+population$country[population$country == "Gambia, The"] <- "Gambia"
+population$country[population$country == "Iran, Islamic Rep."] <- "Iran (Islamic Republic of)"
+population$country[population$country == "Kyrgyz Republic"] <- "Kyrgyzstan"
+population$country[population$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+population$country[population$country == "Micronesia, Fed. Sts."] <- "Micronesia (Federated States of)"
+population$country[population$country == "Korea, Rep."] <- "Republic of Korea"
+population$country[population$country == "Moldova"] <- "Republic of Moldova"
+population$country[population$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+population$country[population$country == "St. Lucia"] <- "Saint Lucia"
+population$country[population$country == "St. Martin (French part)"] <- "Saint Martin (French Part)"
+population$country[population$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+population$country[population$country == "Slovak Republic"] <- "Slovakia"
+population$country[population$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+population$country[population$country == "Tanzania"] <- "United Republic of Tanzania"
+population$country[population$country == "United States"] <- "United States of America"
+population$country[population$country == "Venezuela, RB"] <- "Venezuela (Bolivarian Republic of)"
+population$country[population$country == "Vietnam"] <- "Viet Nam"
+population$country[population$country == "Yemen, Rep."] <- "Yemen"
+population$country[population$country == "Egypt, Arab Rep."] <- "Egypt"
+population$country[population$country == "Virgin Islands (U.S.)"] <- "United States Virgin Islands"
+
+country_codes <- merge(country_codes, population, by = "country_code", all.x = TRUE)
+
+country_codes <- country_codes[, -which(names(country_codes) %in% c("country"))]
+
+country_codes <- country_codes %>%
+  dplyr::rename(`Country Code` = country_code, country = country.x,
+                `Democracy Score` = democracy_score, 
+                `Democracy Category` = democracy_category,
+                `Political Rights` = political_rights,
+                `Civil Liberties` = civil_liberties)
+
+# JEE Scores
+JEE_scores <- read.xlsx("Input/all-countries.xlsx", sheet = "Sheet2 (Ready Score)")
+
+print(paste0("The total number of raw countries is: ", nrow(JEE_scores)))
+
+table_1 <- round(prop.table(table(JEE_scores$status, JEE_scores$who_region)), 4)*100
+
+print(paste0("Regional representation pre-cleaning is: ", table_1))
+
+JEE_scores <- JEE_scores %>%
+  dplyr::filter(status != "Completed but Unpublished" & 
+                status != "JEE Not Done and Expressed No Interest" & 
+                status != "JEE Scheduled")
+
+table_2 <- round(prop.table(table(JEE_scores$status, JEE_scores$who_region)), 4)*100
+
+print(paste0("After cleaning, the total number of countries is: ", nrow(JEE_scores)))
+
+print(paste0("Regional representation post-cleaning is: ", table_2))
+
+JEE_scores <- select(JEE_scores, country, who_region, ReadyScore, prevent, 
+                     detect, respond, other)
+
+JEE_scores$data_ID = "JEE File"
+
+# Renaming problematic countries.
+JEE_scores$country[JEE_scores$country == "eSwatini"] <- "Eswatini"
+JEE_scores$country[JEE_scores$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+
+# MERGE TO COUNTRY CODES.
+Complete_JEE <- merge(country_codes, JEE_scores, by = c("country"), all = TRUE)
+
+No_JEE <- Complete_JEE %>%
+  dplyr::filter(is.na(data_ID))
+
+GHI_funding <- read.csv("Input/countriesfundingdata.csv")
+
+GHI_funding$data_ID = "GHI File"
+
+GHI_funding <- GHI_funding %>%
+  dplyr::rename(`Project Name` = Project.name, `Data Source` = Data.source,
+                `Core Capacities` = Core.capacities, `Funder Type` = Funder.type,
+                `Funder and Sub Organization` = Funder.including.specific.sub.organization..if.any,
+                `Recipient and Sub Organization` = Recipient.including.specific.sub.organization..if.any,
+                `Transaction Year Range` = Transaction.year.range,
+                `Response Specific Amount Committed` = Response.specific.amount.committed,
+                `Response Specific Amount Disbursed` = Response.specific.amount.disbursed,
+                `Number of Recipients` = Number.of.recipients, 
+                `Multiple Recipients` = Multiple.recipients,
+                `Project ID` = Project.id, 
+                `Amount Committed Individual` = Amount.committed.individual,
+                `Amount Disbursed Individual` = Amount.disbursed.individual, 
+                 FIPS = data.FIPS)
+
+Complete_File <- merge(GHI_funding, Complete_JEE, by = "FIPS", all = TRUE)
+
+No_Funding <- Complete_File %>%
+  dplyr::filter(is.na(data_ID.x))
+
+Complete_File <- Complete_File %>%
+  dplyr::filter(!is.na(data_ID.y))
+
+Complete_File <- Complete_File %>%
+  dplyr::filter(!is.na(ReadyScore)) %>%
+  dplyr::filter(!is.na(Recipient))
+
+print(paste0("After merging, the total number of countries is: ", length(unique(Complete_File$FIPS))))
+
+Complete_File$data_ID = "Complete File Data ID"
+
+Complete_File <- Complete_File %>%
+  dplyr::rename(`Country` = country, `WHO Region` = who_region, `Ready Score` = ReadyScore,
+                `Prevent Score` = prevent, `Detect Score` = detect, `Respond Score` = respond)
+
+# Here, we merge in COVID statistics as of October 1st. 
+
+write.csv(Complete_File, "/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/Output/complete_file.csv")
+
+```
+
+```{r imports, include = FALSE}
+
+complete_data <- read.csv("Output/complete_file.csv")
+
+# Merging in foreign assistance.
+foreign_aid <- read.csv("Input/wb_dev_funds.csv")
+
+foreign_aid <- foreign_aid %>%
+  dplyr::rename(country = Country.Name, country_code = Country.Code, 
+                `2015 Dev. Asst.` = Development.Assistance.2015,
+                `2016 Dev. Asst.` = Development.Assistance.2016, 
+                `2017 Dev. Asst.` = Development.Assistance.2017,
+                `2018 Dev. Asst.` = Development.Assistance.2018,
+                `2019 Dev. Asst.` = Development.Assistance.2019)
+
+foreign_aid$country[foreign_aid$country == "Bahamas, The"] <- "Bahamas"
+foreign_aid$country[foreign_aid$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+foreign_aid$country[foreign_aid$country == "Hong Kong SAR, China"] <- "China, Hong Kong Special Administrative Region"
+foreign_aid$country[foreign_aid$country == "Macao SAR, China"] <- "China, Macao Special Administrative Region"
+foreign_aid$country[foreign_aid$country == "Congo, Rep."] <- "Congo"
+foreign_aid$country[foreign_aid$country == "Congo, Dem. Rep."] <- "Democratic Republic of the Congo"
+foreign_aid$country[foreign_aid$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+foreign_aid$country[foreign_aid$country == "Curacao"] <- "Curaçao"
+foreign_aid$country[foreign_aid$country == "Czech Republic"] <- "Czechia"
+foreign_aid$country[foreign_aid$country == "Korea, Dem. People's Rep."] <- "Democratic People's Republic of Korea"
+foreign_aid$country[foreign_aid$country == "Gambia, The"] <- "Gambia"
+foreign_aid$country[foreign_aid$country == "Iran, Islamic Rep."] <- "Iran (Islamic Republic of)"
+foreign_aid$country[foreign_aid$country == "Kyrgyz Republic"] <- "Kyrgyzstan"
+foreign_aid$country[foreign_aid$country == "Lao PDR"] <- "Lao People's Democratic Republic"
+foreign_aid$country[foreign_aid$country == "Micronesia, Fed. Sts."] <- "Micronesia (Federated States of)"
+foreign_aid$country[foreign_aid$country == "Korea, Rep."] <- "Republic of Korea"
+foreign_aid$country[foreign_aid$country == "Moldova"] <- "Republic of Moldova"
+foreign_aid$country[foreign_aid$country == "St. Kitts and Nevis"] <- "Saint Kitts and Nevis"
+foreign_aid$country[foreign_aid$country == "St. Lucia"] <- "Saint Lucia"
+foreign_aid$country[foreign_aid$country == "St. Martin (French part)"] <- "Saint Martin (French Part)"
+foreign_aid$country[foreign_aid$country == "St. Vincent and the Grenadines"] <- "Saint Vincent and the Grenadines"
+foreign_aid$country[foreign_aid$country == "Slovak Republic"] <- "Slovakia"
+foreign_aid$country[foreign_aid$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+foreign_aid$country[foreign_aid$country == "Tanzania"] <- "United Republic of Tanzania"
+foreign_aid$country[foreign_aid$country == "United States"] <- "United States of America"
+foreign_aid$country[foreign_aid$country == "Venezuela, RB"] <- "Venezuela (Bolivarian Republic of)"
+foreign_aid$country[foreign_aid$country == "Vietnam"] <- "Viet Nam"
+foreign_aid$country[foreign_aid$country == "Yemen, Rep."] <- "Yemen"
+foreign_aid$country[foreign_aid$country == "Egypt, Arab Rep."] <- "Egypt"
+foreign_aid$country[foreign_aid$country == "Virgin Islands (U.S.)"] <- "United States Virgin Islands"
+
+foreign_aid <- foreign_aid %>%
+  dplyr::rename(Recipient = country)
+
+# Merging in foreign aid data.
+complete_data <- merge(complete_data, foreign_aid, by = "Recipient", all.x = TRUE)
+
+# TODO: Settler Deaths (Colonialism); VDEM Democracy; GHSI data; DevEx Funding.
+
+# Next, merging in global health tracker data for Ebola.
+fundingdata <- read.csv("Input/countriesfundingdata_ebola.csv")
+
+# First run this with COVID PHEIC.
+
+# Remove commas from funding amount variables
+fundingdata$Response.specific.amount.committed <- str_replace_all(fundingdata$Response.specific.amount.committed, ",", "")
+fundingdata$Response.specific.amount.disbursed <- str_replace_all(fundingdata$Response.specific.amount.disbursed, ",", "")
+
+# Destring funding amount variables
+fundingdata$Response.specific.amount.committed <- as.numeric(fundingdata$Response.specific.amount.committed)
+fundingdata$Response.specific.amount.disbursed <- as.numeric(fundingdata$Response.specific.amount.disbursed)
+
+# Count missings (22 missing amount disbursed).
+sum(is.na(fundingdata$Response.specific.amount.committed))
+sum(is.na(fundingdata$Response.specific.amount.disbursed))
+
+# Split recipient types, keep only government recipients
+countries <- separate_rows(fundingdata, 1, sep = "; ")
+countries <- countries[countries$Recipient.type == 'Government', ]
+
+# Unbundle funding for multiple recipients
+## Find the number of recipient countries in each entry and create an indicator for countries with multiple recipents
+countries$Number.of.recipients <- str_count(countries$Recipient, ";") + 1
+for (i in 1:length(countries$Recipient)) {
+  if (countries$Number.of.recipients[i] > 1) {
+    countries$Multiple.recipients[i] <- 1
+  } else{
+    countries$Multiple.recipients[i] <- 0
+  }
+}
+
+## Maximum number of recipient countries is 8; 244 out of 710 (~34%) observations have multiple recipient countries
+print(max(countries$Number.of.recipients))
+sum(countries$Multiple.recipients)
+
+## Create an id variable for each project
+countries$Project.id <- 1:nrow(countries)
+
+## Split the rows with multiple observations
+countries <- separate_rows(countries, 8, sep = "; ")
+
+## Divide amounts committed and disbursed equally among recipients
+countries$Amount.committed.individual <- countries$Response.specific.amount.committed / countries$Number.of.recipients
+countries$Amount.disbursed.individual <- countries$Response.specific.amount.disbursed / countries$Number.of.recipients
+
+# Keep necessary columns
+countries <- select(countries, Recipient, Project.name, Data.source, Core.capacities, Funder, Funder.type, Recipient.type,
+                    Transaction.year.range, Support.type, Amount.committed, Amount.disbursed, Number.of.recipients, 
+                    Multiple.recipients, Project.id, Amount.committed.individual, Amount.disbursed.individual)
+
+# Summarize data structure
+str(complete_data)
+
+# COLLAPSE DATASET ON RECIPIENTS
+
+# Collapse for means
+country_means <- aggregate(cbind(Democracy.Score, Political.Rights, Civil.Liberties, X2019.FDI.Inflows, X2019.GNI.Per.Capita, X2018.Health.Expenditures, X2020.Population, `2019 Dev. Asst.`, Ready.Score, Prevent.Score, Detect.Score, Respond.Score, other) ~ Recipient, data = complete_data, mean, na.action = na.pass)
+
+# Collapse for totals (create variable to count total number of funding projects)
+complete_data$Projects <- 1
+
+country_totals <- aggregate(cbind(Amount.Committed.Individual, Amount.Disbursed.Individual, Projects) ~ Recipient, data = complete_data, sum, na.action = na.omit)
+
+# Collapse for categorical data
+country_cat <- collap(complete_data, Democracy.Category ~ Recipient)
+
+# Merge
+country_data <- merge(country_means, country_totals, all = TRUE)
+country_data <- merge(country_data, country_cat, all = TRUE)
+
+# TODO: PROPERLY Add in COVID cases and deaths
+covid_data <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/10-04-2021.csv")
+covid_data$Recipient <- covid_data$Country_Region
+covid_data <- data.frame(covid_data$Confirmed, covid_data$Deaths, covid_data$Recipient)
+colnames(covid_data) <- c("Cases", "Deaths", "Recipient")
+covid_data <- collap(covid_data, Cases + Deaths ~ Recipient, FUN = fsum)
+
+# Creating data IDs to check names in merge.
+country_data$data_ID = "Country Data ID"
+covid_data$data_ID = "COVID Data ID"
+
+# Correcting names...
+
+covid_data$Recipient[covid_data$Recipient == "Congo (Brazzaville)"] <- "Congo"
+covid_data$Recipient[covid_data$Recipient == "Congo (Kinshasa)"] <- "Democratic Republic of the Congo"
+covid_data$Recipient[covid_data$Recipient == "Laos"] <- "Lao People's Democratic Republic"
+covid_data$Recipient[covid_data$Recipient == "Burma"] <- "Myanmar"
+covid_data$Recipient[covid_data$Recipient == "Korea, South"] <- "Republic of Korea"
+covid_data$Recipient[covid_data$Recipient == "Moldova"] <- "Republic of Moldova"
+covid_data$Recipient[covid_data$Recipient == "Tanzania"] <- "United Republic of Tanzania"
+covid_data$Recipient[covid_data$Recipient == "US"] <- "United States of America"
+covid_data$Recipient[covid_data$Recipient == "Vietnam"] <- "Viet Nam"
+
+# Merging data.
+country_data <- merge(country_data, covid_data, by = "Recipient", all.x = TRUE)
+
+check <- select(country_data, Recipient, Cases, Deaths, data_ID.x, data_ID.y)
+
+country_data <- country_data[, -which(names(country_data) %in% c("data_ID.x", "data_ID.y"))]
+
+# Create per capita measures of COVID-19 response funding committed and disbursed
+country_data$Per.Capita.Committed <- country_data$Amount.Committed.Individual / country_data$X2020.Population
+country_data$Per.Capita.Disbursed <- country_data$Amount.Disbursed.Individual / country_data$X2020.Population
+
+# TODO: Consider removing outliers by Amount Disbursed Funds....
+# LOW: Canada; Australia; Singapore; Japan; Kuwait; Eritrea.
+# HIGH: Phillippines; Indonesia; Morocco; Pakistan
+
+# Create per capita measures of cumulative COVID-19 confirmed cases and deaths
+country_data$Per.Capita.Cases <- country_data$Cases / country_data$X2020.Population
+country_data$Per.Capita.Deaths <- country_data$Deaths / country_data$X2020.Population
+
+# Create per 100,000 measures of cumulative COVID-19 confirmed cases and deaths
+country_data$Per.hundredk.Cases <- country_data$Per.Capita.Cases * 100000
+country_data$Per.hundredk.Deaths <- country_data$Per.Capita.Deaths * 100000
+
+# 78 countries represented in the merged data; 25 variables
+head(country_data)
+str(country_data)
+
+write.csv(country_data, "/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/Output/country_data.csv")
+
+```
+
+```{r visuals, include = FALSE}
+
+# Total Disbursed Funding Against JEE Scores
+
+visualization_1 <- country_data
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("goldenrod1", "darkred"))
+my_colors <- fun_color_range(20)
+
+# TODO: CONVERT COLOR TO BINARY FOR FUNDER TYPE
+
+total_disbursed_JEE <- ggplot(visualization_1, aes(x = Ready.Score, y = Amount.Disbursed.Individual)) + geom_point(aes(size = X2020.Population, color = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs(x = "JEE Ready Score", y = "Total Funds Disbursed", title = "Total COVID-19 Response Funding vs. JEE Ready Scores", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)", caption = "Note: Dots Sized by Country Population; Y-Axis on Log Scale with Linearized Values") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_y_continuous(trans = "log", labels = c("$0", "$1,000,000,000", "$2,000,000,000", "$3,000,000,000"))
+total_disbursed_JEE
+
+# Per Capita Disbursed Funding Against JEE Scores
+
+visualization_2 <- country_data
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("mediumseagreen", "dodgerblue4"))
+my_colors <- fun_color_range(20)
+
+# visualization_2$log_pcd <- log(visualization_2$Per.Capita.Disbursed)
+# 
+# visualization_2 <- visualization_2 %>%
+#   dplyr::filter(!is.na(log_pcd)) %>%
+#   dplyr::filter(log_pcd > 0)
+
+per_capita_disbursed_JEE <- ggplot(visualization_2, aes(x = Ready.Score, y = Per.Capita.Disbursed)) + geom_point(aes(size = X2020.Population, color = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs (x = "JEE Ready Score", y = "Per Capita Funds Disbursed", title = "Per Capita COVID-19 Response Funding vs. JEE Ready Scores", caption = "Note: Dots Sized by Country Population; Y-Axis on Log Scale with Linearized Values", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_y_continuous(trans = "log", labels = c("$0", "$500", "$1,000", "$1,500", "$2,000"))
+per_capita_disbursed_JEE
+
+p_all_1 <- total_disbursed_JEE / per_capita_disbursed_JEE
+p_all_1 <- p_all_1 + plot_annotation(title = 'Total Funding Disbursements by JEE Scores', subtitle = "Meridian Collective", tag_levels = 'A') + plot_layout(guides = 'collect')
+p_all_1
+
+# Government Disbursed Funding Against Health Expenditures
+
+government_funding <- read.csv("/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/Output/government_funding.csv")
+
+visualization_3 <- government_funding
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("tomato", "slateblue4"))
+my_colors <- fun_color_range(20)
+
+visualization_3 <- visualization_3 %>%
+  dplyr::filter(X2018.Health.Expenditures < 10000)
+
+gov_total_disbursed_health_expend <- ggplot(visualization_3, aes(x = X2018.Health.Expenditures, y = Funder.Type.Disbursed)) + geom_point(aes(size = X2020.Population, colour = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs (x = "Per Capita Health Expenditures (2018)", y = "Total Funds Disbursed", title = "Total Government COVID-19 Response Funding vs. Per Capita Health Expenditures", caption = "Note: Dots Sized by Country Population; X- and Y-Axes on Log Scale with Linearized Values; One Outlier Removed (U.S.)", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_y_continuous(trans = "log", labels = c("$0", "$1,000,000,000", "$2,000,000,000", "$3,000,000,000")) + scale_x_continuous(trans = "log", labels = c("$1,000", "$2,000", "$3,000", "$4,000")) + theme(plot.title = element_text(size = 10))
+gov_total_disbursed_health_expend
+
+visualization_4 <- government_funding
+
+visualization_4 <- visualization_4 %>%
+  dplyr::filter(X2018.Health.Expenditures < 4000)
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("powderblue", "darkslategrey"))
+my_colors <- fun_color_range(20)
+
+gov_per_capita_disbursed_health_expend <- ggplot(visualization_4, aes(x = X2018.Health.Expenditures, y = Funder.Type.Per.Capita.Disbursed)) + geom_point(aes(size = X2020.Population, colour = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs (x = "Per Capita Health Expenditures (2018)", y = "Per Capita Funds Disbursed", title = "Per Capita Government COVID-19 Response Funding vs. Per Capita Health Expenditures", caption = "Note: Dots Sized by Country Population; X- and Y-Axes on Log Scale with Linearized Values; Two Outliers Removed", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_x_continuous(trans = "log", breaks = c(20.08554, 54.59815, 148.41316, 403.32879, 1096.63316), labels = c("$0", "$500", "$1,000", "$1,500", "$2,000")) + scale_y_continuous(trans = "log", breaks = c(0.04978707, 1.00000000, 20.08553692, 403.42879349), labels = c("$0", "$20", "$40", "$60")) + theme(plot.title = element_text(size = 10))
+gov_per_capita_disbursed_health_expend
+
+visualization_5 <- government_funding
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("khaki", "indianred4"))
+my_colors <- fun_color_range(20)
+
+gov_total_disbursed_JEE <- ggplot(visualization_5, aes(x = Ready.Score, y = Funder.Type.Disbursed)) + geom_point(aes(size = X2020.Population, colour = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs (x = "JEE Scores", y = "Total Funds Disbursed", title = "Total Government COVID-19 Response Funding vs. JEE Scores", caption = "Note: Dots Sized by Country Population; Y-Axis on Log Scale with Linearized Values", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_y_continuous(trans = "log", labels = c("$0", "$1,000,000,000", "$2,000,000,000", "$3,000,000,000"))
+gov_total_disbursed_JEE
+
+visualization_6 <- government_funding
+
+scaleFUN <- function(x) sprintf("%.0f", x)
+
+fun_color_range <- colorRampPalette(c("plum2", "lightcoral"))
+my_colors <- fun_color_range(20)
+
+gov_per_capita_disbursed_JEE <- ggplot(visualization_6, aes(x = Ready.Score, y = Funder.Type.Per.Capita.Disbursed)) + geom_point(aes(size = X2020.Population, colour = rank(X2019.GNI.Per.Capita, na.last = TRUE))) + geom_smooth(method = "loess", size = 0.75, color = "grey", linetype = "dashed") + labs (x = "JEE Scores", y = "Per Capita Funds Disbursed", title = "Per Capita Government COVID-19 Response Funding vs. JEE Scores", caption = "Note: Dots Sized by Country Population; Y-Axis on Log Scale with Linearized Values", size = "Population (2020)", color = "Ranked GNI Per Capita (2019)") + guides(size = "none") + theme_bw() + scale_colour_gradientn(colors = my_colors, labels = c("", "", "", "", "")) + scale_y_continuous(trans = "log", labels = c("$20", "$40", "$60", "$80"))
+gov_per_capita_disbursed_JEE
+
+p_all_2 <- (gov_total_disbursed_JEE / gov_per_capita_disbursed_JEE) | (gov_total_disbursed_health_expend / gov_per_capita_disbursed_health_expend)
+p_all_2 <- p_all_2 + plot_annotation(title = 'Government Funding Disbursements by JEE Scores & Health Expenditures', subtitle = "Meridian Collective", tag_levels = 'A') + plot_layout(guides = 'collect')
+p_all_2
+
+# Ensuring we have properly restricted the No JEE sample to also not include funding data.
+No_JEE <- No_JEE[!(No_JEE$country %in% country_data$Recipient),]
+
+# Reading in Covid data for merge.
+covid_data <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/10-04-2021.csv")
+covid_data$country <- covid_data$Country_Region
+covid_data <- data.frame(covid_data$Confirmed, covid_data$Deaths, covid_data$country)
+colnames(covid_data) <- c("Cases", "Deaths", "country")
+
+# Renaming troublesome countries for merge.
+covid_data$country[covid_data$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+covid_data$country[covid_data$country == "Iran"] <- "Iran (Islamic Republic of)"
+covid_data$country[covid_data$country == "Russia"] <- "Russian Federation"
+covid_data$country[covid_data$country == "Syria"] <- "Syrian Arab Republic"
+covid_data$country[covid_data$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+covid_data$country[covid_data$country == "Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+
+# Collapsing data by country.
+covid_data <- collap(covid_data, Cases + Deaths ~ country, FUN = fsum)
+
+# Creating data IDs to check names in merge.
+No_JEE$data_ID = "No JEE Data ID"
+covid_data$data_ID = "COVID Data ID"
+
+# Merging data.
+No_JEE <- merge(No_JEE, covid_data, by = "country", all.x = TRUE)
+
+# Filtering observations.
+No_JEE <- No_JEE %>%
+  dplyr::filter(!is.na(data_ID.x)) %>%
+  dplyr::filter(!is.na(data_ID.y))
+
+# Create per 100,000 measures of cumulative COVID-19 confirmed cases and deaths
+No_JEE$Per.Capita.Cases <- No_JEE$Cases / No_JEE$`2020 Population`
+No_JEE$Per.Capita.Deaths <- No_JEE$Deaths / No_JEE$`2020 Population`
+No_JEE$Per.hundredk.Cases <- No_JEE$Per.Capita.Cases * 100000
+No_JEE$Per.hundredk.Deaths <- No_JEE$Per.Capita.Deaths * 100000
+
+# Formatting our in and out-of-sample files for dumbbell plot visual.
+
+visualization_7a <- select(No_JEE, country, Per.hundredk.Cases, Per.hundredk.Deaths, `2019 GNI Per Capita`, `2018 Health Expenditures`, `2019 FDI Inflows`)
+
+visualization_7a$samp_status = "Out of Sample"
+
+visualization_7b <- select(country_data, Recipient, Per.hundredk.Cases, Per.hundredk.Deaths, X2019.GNI.Per.Capita, X2018.Health.Expenditures, X2019.FDI.Inflows)
+
+visualization_7b$samp_status = "In-Sample"
+
+visualization_7b <- visualization_7b %>%
+  dplyr::rename(country = Recipient, `2019 GNI Per Capita` = X2019.GNI.Per.Capita, 
+                `2018 Health Expenditures` = X2018.Health.Expenditures, 
+                `2019 FDI Inflows` = X2019.FDI.Inflows)
+
+# Appending our files.
+dumbbell_1 <- rbind(visualization_7a, visualization_7b)
+
+# Rounding our values.
+dumbbell_1$`2018 Health Expenditures` <- round(dumbbell_1$`2018 Health Expenditures`, 0)
+dumbbell_1$`2019 FDI Inflows` <- round(dumbbell_1$`2019 FDI Inflows`, 0)
+
+# Collapse for medians.
+dumbbell_1 <- aggregate(cbind(Per.hundredk.Cases, Per.hundredk.Deaths, `2019 GNI Per Capita`, `2018 Health Expenditures`, `2019 FDI Inflows`) ~ samp_status, data = dumbbell_1, median, na.action = na.omit)
+
+# Generating list of countries with no funding data.
+
+# Merging to country codes.
+country_codes <- select(country_codes, country, FIPS)
+No_Funding <- No_Funding[, -which(names(No_Funding) %in% c("country", "data_ID.x", "data_ID.y"))]
+No_Funding <- merge(country_codes, No_Funding, by = c("FIPS"), all.y = TRUE)
+
+# TODO: MERGE IN COVID CASES.
+
+covid_data <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/10-04-2021.csv")
+covid_data$country <- covid_data$Country_Region
+covid_data <- data.frame(covid_data$Confirmed, covid_data$Deaths, covid_data$country)
+colnames(covid_data) <- c("Cases", "Deaths", "country")
+
+# Renaming troublesome countries for merge.
+covid_data$country[covid_data$country == "Bolivia"] <- "Bolivia (Plurinational State of)"
+covid_data$country[covid_data$country == "Iran"] <- "Iran (Islamic Republic of)"
+covid_data$country[covid_data$country == "Russia"] <- "Russian Federation"
+covid_data$country[covid_data$country == "Syria"] <- "Syrian Arab Republic"
+covid_data$country[covid_data$country == "United Kingdom"] <- "United Kingdom of Great Britain and Northern Ireland"
+covid_data$country[covid_data$country == "Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+covid_data$country[covid_data$country == "Brunei"] <- "Brunei Darussalam"
+covid_data$country[covid_data$country == "Cote d'Ivoire"] <- "Côte d'Ivoire"
+
+# Collapsing data by country.
+covid_data <- collap(covid_data, Cases + Deaths ~ country, FUN = fsum)
+
+# Creating data IDs to check names in merge.
+No_Funding$data_ID = "No Funding Data ID"
+covid_data$data_ID = "COVID Data ID"
+
+# Merging data.
+No_Funding <- merge(No_Funding, covid_data, by = "country", all.x = TRUE)
+
+check <- select(No_Funding, country, Cases, Deaths, data_ID.x, data_ID.y)
+
+# Filtering observations.
+No_Funding <- No_Funding %>%
+  dplyr::filter(!is.na(data_ID.x)) %>%
+  dplyr::filter(!is.na(data_ID.y))
+
+# Create per 100,000 measures of cumulative COVID-19 confirmed cases and deaths
+No_Funding$Per.Capita.Cases <- No_Funding$Cases / No_Funding$`2020 Population`
+No_Funding$Per.Capita.Deaths <- No_Funding$Deaths / No_Funding$`2020 Population`
+No_Funding$Per.hundredk.Cases <- No_Funding$Per.Capita.Cases * 100000
+No_Funding$Per.hundredk.Deaths <- No_Funding$Per.Capita.Deaths * 100000
+
+# Creating joint out-of-sample subset.
+No_Funding_or_JEE <- No_JEE[(No_JEE$country %in% No_Funding$country),]
+
+# TODO: Finish merging by funding and compare median amount disbursed in the in-sample to No JEE sample.
+
+# GHI_funding <- read.csv("Input/countriesfundingdata.csv")
+# 
+# GHI_funding$data_ID = "GHI File"
+# 
+# GHI_funding <- GHI_funding %>%
+#   dplyr::rename(`Project Name` = Project.name, `Data Source` = Data.source,
+#                 `Core Capacities` = Core.capacities, `Funder Type` = Funder.type,
+#                 `Funder and Sub Organization` = Funder.including.specific.sub.organization..if.any,
+#                 `Recipient and Sub Organization` = Recipient.including.specific.sub.organization..if.any,
+#                 `Transaction Year Range` = Transaction.year.range,
+#                 `Response Specific Amount Committed` = Response.specific.amount.committed,
+#                 `Response Specific Amount Disbursed` = Response.specific.amount.disbursed,
+#                 `Number of Recipients` = Number.of.recipients, 
+#                 `Multiple Recipients` = Multiple.recipients,
+#                 `Project ID` = Project.id, 
+#                 `Amount Committed Individual` = Amount.committed.individual,
+#                 `Amount Disbursed Individual` = Amount.disbursed.individual, 
+#                  FIPS = data.FIPS)
+# 
+# No_JEE <- merge(GHI_funding, No_JEE, by = "FIPS", all = TRUE)
+# 
+# No_Funding <- Complete_File %>%
+#   dplyr::filter(is.na(data_ID.x))
+# 
+# full_sample <- select(country_data, Recipient, Amount.Disbursed.Individual)
+# No_JEE <- select(No_JEE, country, Amount.Disbursed.Individual)
+
+
+# Generating our complete sample subsets.
+full_sample <- select(country_data, Recipient, X2019.GNI.Per.Capita, X2018.Health.Expenditures, X2019.FDI.Inflows, Per.hundredk.Cases, Per.hundredk.Deaths)
+No_JEE <- select(No_JEE, country, `2019 GNI Per Capita`, `2018 Health Expenditures`, `2019 FDI Inflows`, Per.hundredk.Cases, Per.hundredk.Deaths)
+No_Funding <- select(No_Funding, country, `2019 GNI Per Capita`, `2018 Health Expenditures`, `2019 FDI Inflows`, Per.hundredk.Cases, Per.hundredk.Deaths)
+No_Funding_or_JEE <- select(No_Funding_or_JEE, country, `2019 GNI Per Capita`, `2018 Health Expenditures`, `2019 FDI Inflows`, Per.hundredk.Cases, Per.hundredk.Deaths)
+
+full_sample <- full_sample %>%
+  dplyr::rename(country = Recipient, `2019 GNI Per Capita` = X2019.GNI.Per.Capita, 
+                `2018 Health Expenditures` = X2018.Health.Expenditures, 
+                `2019 FDI Inflows` = X2019.FDI.Inflows)
+
+full_sample$samp_status = "In-Sample"
+No_JEE$samp_status = "Out-of-Sample (No JEE Scores OR Covid Cases)"
+No_Funding$samp_status = "Out-of-Sample (No Funding Data OR Covid Cases)"
+No_Funding_or_JEE$samp_status = "Out-of-Sample (No JEE Scores OR Funding Data OR Covid Cases)"
+
+# Appending our files.
+sample_subsets <- rbind(full_sample, No_JEE, No_Funding, No_Funding_or_JEE)
+
+sample_subsets <- read.csv("/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/Output/sample_subsets.csv")
+
+# Collapse for medians.
+dumbbell_1 <- aggregate(cbind(Per.hundredk.Cases, Per.hundredk.Deaths, X2019.GNI.Per.Capita, 
+              X2018.Health.Expenditures, X2019.FDI.Inflows) ~ samp_status, data = sample_subsets, median, na.action = na.omit)
+
+# write.csv(sample_subsets, "/Users/sameer_nair-desai/Desktop/KEY/Work/Meridian_Collective/Pandemic_Indices/Output/sample_subsets.csv")
+
+# TODO: Think through FDI inflows (where negative values mean outflows)...
+# will this screw up your median comparisons?
+# TODO: DROP ALL COUNTRIES IN THE FULL SAMPLE WITHOUT COVID STATS.
+
+# country_data$funding_disbursed_quarts <- dplyr::ntile(country_data$Amount.Disbursed.Individual, 4)
+# 
+# country_data$flag <- ifelse(country_data$Amount.Disbursed.Individual > country_data$Amount.Committed.Individual, 1, 0)
+# 
+# demographic_means <- aggregate(cbind(X2019.GNI.Per.Capita, X2018.Health.Expenditures, X2020.Population, `2019 Dev. Asst.`, Ready.Score, Prevent.Score, Detect.Score, Respond.Score, Per.hundredk.Cases, Per.hundredk.Deaths) ~ funding_disbursed_quarts, data = country_data, mean, na.action = na.omit)
+# 
+# demographic_means <- demographic_means %>%
+#   dplyr::filter(funding_disbursed_quarts != 2 & funding_disbursed_quarts != 3)
+# 
+# demographic_means$funding_disbursed_quarts <- ifelse(demographic_means$funding_disbursed_quarts == 1, "Most Funded Countries", "Least Funded Countries")
+
+# dumbbell_1 <- reshape2::melt(demographic_means, id = "funding_disbursed_quarts") 
+# dumbbell_1 <- reshape2::dcast(dumbbell_1, variable ~ funding_disbursed_quarts)
+# dumbbell_1$`Least Funded Countries` = round(dumbbell_1$`Least Funded Countries`, 0)
+# dumbbell_1$`Most Funded Countries` = round(dumbbell_1$`Most Funded Countries`, 0)
+# 
+# dumbbell_1$`Percent Difference` <- dumbbell_1$`Most Funded Countries` - dumbbell_1$`Least Funded Countries`
+# 
+# # Correcting variable values (for our scale).
+# 
+# dumbbell_1$variable <- ifelse(dumbbell_1$variable == "percent_white", "Percent White", dumbbell_1$variable)
+# dumbbell_1$variable <- ifelse(dumbbell_1$variable == "2", "Percent Black", dumbbell_1$variable)
+# dumbbell_1$variable <- ifelse(dumbbell_1$variable == "3", "Percent Hispanic", dumbbell_1$variable)
+# dumbbell_1$variable <- ifelse(dumbbell_1$variable == "4", "Percent Male", dumbbell_1$variable)
+# dumbbell_1$variable <- ifelse(dumbbell_1$variable == "5", "Percent > HS", dumbbell_1$variable)
+
+# Dumbbell Plot of In vs. Out of Sample Countries
+
+```
+
